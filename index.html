@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sitekey</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            background: #f2f2f2;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            margin: auto;
+            padding: 30px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .subtitulo {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .painel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 3px 15px rgba(0,0,0,0.08);
+        }
+
+        .topo {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .contador {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .pcs {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .pc {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .pc-cabecalho {
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            background: #fafafa;
+            border-bottom: 1px solid #eee;
+        }
+
+        .pc-nome {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+            font-size: 17px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .bolinha {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            background: #888;
+        }
+
+        .online {
+            background: #20b455;
+        }
+
+        .offline {
+            background: #d33;
+        }
+
+        .pc-conteudo {
+            padding: 16px;
+        }
+
+        .pc-acoes {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .atualizar {
+            background: #1769e0;
+            color: white;
+        }
+
+        .atualizar:hover:not(:disabled) {
+            background: #0f55bb;
+        }
+
+        .arquivos {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .arquivo {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .informacoes {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .nome {
+            font-weight: bold;
+            margin-bottom: 5px;
+            overflow-wrap: anywhere;
+        }
+
+        .data {
+            color: #777;
+            font-size: 13px;
+        }
+
+        .acoes {
+            display: flex;
+            gap: 8px;
+        }
+
+        .baixar {
+            background: #20a464;
+            color: white;
+        }
+
+        .excluir {
+            background: #d93636;
+            color: white;
+        }
+
+        .mensagem {
+            text-align: center;
+            color: #777;
+            padding: 18px;
+        }
+
+        .sem-pcs {
+            text-align: center;
+            color: #777;
+            padding: 30px 10px;
+        }
+
+        .atualizacao-pendente {
+            color: #1769e0;
+            font-size: 13px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        @media (max-width: 600px) {
+            .pc-cabecalho {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .arquivo {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .acoes {
+                width: 100%;
+            }
+
+            .acoes button {
+                flex: 1;
+            }
+
+            .topo {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Sitekey</h1>
+
+    <p class="subtitulo">
+        Gerenciamento de arquivos dos computadores
+    </p>
+
+    <div class="painel">
+
+        <div class="topo">
+            <strong>Computadores</strong>
+            <span id="contador" class="contador">
+                Verificando...
+            </span>
+        </div>
+
+        <div id="pcs" class="pcs">
+            <div class="mensagem">
+                Carregando computadores...
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+    /*
+        URL DO SEU RENDER
+    */
+
+    const SERVIDOR =
+        "https://sitekey-nvbunpbspnbnbrpnu.onrender.com";
+
+
+    // =========================================================
+    // ESCAPAR TEXTO PARA HTML
+    // =========================================================
+
+    function escaparHTML(texto) {
+
+        return String(texto)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+
+    // =========================================================
+    // CARREGAR COMPUTADORES
+    // =========================================================
+
+    async function carregarComputadores() {
+
+        const container =
+            document.getElementById("pcs");
+
+        const contador =
+            document.getElementById("contador");
+
+        try {
+
+            const resposta =
+                await fetch(SERVIDOR + "/pcs");
+
+            if (!resposta.ok) {
+                throw new Error("Erro ao carregar PCs");
+            }
+
+            const dados =
+                await resposta.json();
+
+            container.innerHTML = "";
+
+            const lista = dados.pcs || [];
+
+            const online =
+                lista.filter(pc => pc.online).length;
+
+            contador.textContent =
+                `${lista.length} computador(es) • ${online} online`;
+
+
+            if (lista.length === 0) {
+
+                container.innerHTML = `
+                    <div class="sem-pcs">
+                        Nenhum computador conectado ainda.
+                    </div>
+                `;
+
+                return;
+            }
+
+
+            for (const pc of lista) {
+
+                await criarCardPC(pc, container);
+            }
+
+
+        } catch (erro) {
+
+            contador.textContent =
+                "Servidor indisponível";
+
+            container.innerHTML = `
+                <div class="sem-pcs">
+                    Não foi possível carregar os computadores.
+                </div>
+            `;
+        }
+    }
+
+
+    // =========================================================
+    // CRIAR CARD DE UM COMPUTADOR
+    // =========================================================
+
+    async function criarCardPC(pc, container) {
+
+        const div =
+            document.createElement("div");
+
+        div.className = "pc";
+
+        const idSeguro =
+            encodeURIComponent(pc.id);
+
+
+        const statusClasse =
+            pc.online ? "online" : "offline";
+
+        const statusTexto =
+            pc.online ? "ONLINE" : "OFFLINE";
+
+
+        let arquivos = [];
+
+        try {
+
+            const resposta =
+                await fetch(
+                    SERVIDOR +
+                    "/arquivos?pc_id=" +
+                    idSeguro
+                );
+
+            if (resposta.ok) {
+
+                const dados =
+                    await resposta.json();
+
+                arquivos =
+                    dados.arquivos || [];
+            }
+
+        } catch (erro) {
+
+            arquivos = [];
+        }
+
+
+        const arquivosHTML =
+            arquivos.length === 0
+                ? `
+                    <div class="mensagem">
+                        Nenhum arquivo recebido deste computador.
+                    </div>
+                  `
+                : arquivos.map(arquivo => {
+
+                    const nome =
+                        escaparHTML(arquivo.nome);
+
+                    const idArquivo =
+                        encodeURIComponent(arquivo.id);
+
+                    return `
+                        <div class="arquivo">
+
+                            <div class="informacoes">
+
+                                <div class="nome">
+                                    📄 ${nome}
+                                </div>
+
+                                <div class="data">
+                                    Enviado em
+                                    ${escaparHTML(arquivo.data)}
+                                    às
+                                    ${escaparHTML(arquivo.hora)}
+                                </div>
+
+                            </div>
+
+                            <div class="acoes">
+
+                                <button
+                                    class="baixar"
+                                    onclick="baixarArquivo(
+                                        '${idSeguro}',
+                                        '${idArquivo}'
+                                    )">
+                                    Baixar
+                                </button>
+
+                                <button
+                                    class="excluir"
+                                    onclick="excluirArquivo(
+                                        '${idSeguro}',
+                                        '${idArquivo}'
+                                    )">
+                                    Excluir
+                                </button>
+
+                            </div>
+
+                        </div>
+                    `;
+                }).join("");
+
+
+        const pedido =
+            pc.atualizacao_solicitada
+                ? `
+                    <span class="atualizacao-pendente">
+                        • Atualização solicitada
+                    </span>
+                  `
+                : "";
+
+
+        div.innerHTML = `
+
+            <div class="pc-cabecalho">
+
+                <div class="pc-nome">
+
+                    💻
+                    ${escaparHTML(pc.nome)}
+
+                    ${pedido}
+
+                </div>
+
+                <div class="status">
+
+                    <div class="bolinha ${statusClasse}">
+                    </div>
+
+                    <span>
+                        ${statusTexto}
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div class="pc-conteudo">
+
+                <div class="pc-acoes">
+
+                    <button
+                        class="atualizar"
+                        onclick="solicitarAtualizacao(
+                            '${idSeguro}',
+                            '${escaparHTML(pc.nome)}'
+                        )"
+                        ${pc.online ? "" : "disabled"}>
+
+                        🔄 Atualizar arquivo
+
+                    </button>
+
+                </div>
+
+
+                <div class="arquivos">
+
+                    ${arquivosHTML}
+
+                </div>
+
+            </div>
+
+        `;
+
+        container.appendChild(div);
+    }
+
+
+    // =========================================================
+    // SOLICITAR ATUALIZAÇÃO DE UM PC
+    // =========================================================
+
+    async function solicitarAtualizacao(
+        pcId,
+        pcNome
+    ) {
+
+        try {
+
+            const resposta =
+                await fetch(
+                    SERVIDOR +
+                    "/atualizar?pc_id=" +
+                    pcId,
+                    {
+                        method: "POST"
+                    }
+                );
+
+            const dados =
+                await resposta.json();
+
+
+            if (dados.sucesso) {
+
+                alert(
+                    "Atualização solicitada!\n\n" +
+                    "Computador: " +
+                    pcNome +
+                    "\n\n" +
+                    "Ele enviará o config_te.txt."
+                );
+
+                carregarComputadores();
+
+            } else {
+
+                alert(
+                    dados.erro ||
+                    "Não foi possível solicitar a atualização."
+                );
+            }
+
+
+        } catch (erro) {
+
+            alert(
+                "Não foi possível conectar ao servidor."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // BAIXAR
+    // =========================================================
+
+    function baixarArquivo(
+        pcId,
+        nome
+    ) {
+
+        window.location.href =
+            SERVIDOR +
+            "/baixar/" +
+            pcId +
+            "/" +
+            nome;
+    }
+
+
+    // =========================================================
+    // EXCLUIR
+    // =========================================================
+
+    async function excluirArquivo(
+        pcId,
+        nome
+    ) {
+
+        const confirmar =
+            confirm(
+                "Deseja realmente excluir este arquivo?"
+            );
+
+
+        if (!confirmar) {
+            return;
+        }
+
+
+        try {
+
+            const resposta =
+                await fetch(
+                    SERVIDOR +
+                    "/excluir/" +
+                    pcId +
+                    "/" +
+                    nome,
+                    {
+                        method: "DELETE"
+                    }
+                );
+
+
+            const dados =
+                await resposta.json();
+
+
+            if (dados.sucesso) {
+
+                carregarComputadores();
+
+            } else {
+
+                alert(
+                    dados.erro ||
+                    "Não foi possível excluir."
+                );
+            }
+
+
+        } catch (erro) {
+
+            alert(
+                "Não foi possível conectar ao servidor."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // INICIALIZAÇÃO
+    // =========================================================
+
+    carregarComputadores();
+
+
+    // Atualiza computadores, status e arquivos a cada 5 segundos.
+    setInterval(() => {
+
+        carregarComputadores();
+
+    }, 5000);
+
+</script>
+
+</body>
+</html>
