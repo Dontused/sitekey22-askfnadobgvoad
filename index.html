@@ -1,7 +1,5 @@
-```html
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +7,6 @@
     <title>Sitekey</title>
 
     <style>
-
         * {
             box-sizing: border-box;
             margin: 0;
@@ -114,19 +111,9 @@
 
         .editar-nome,
         .salvar-nome,
-        .cancelar-nome,
-        .excluir-pc {
+        .cancelar-nome {
             padding: 7px 10px;
             font-size: 12px;
-        }
-
-        .excluir-pc {
-            background: #d93636;
-            color: white;
-        }
-
-        .excluir-pc:hover {
-            background: #b92323;
         }
 
         .editar-nome {
@@ -268,7 +255,6 @@
         }
 
         @media (max-width: 600px) {
-
             .pc-cabecalho {
                 align-items: flex-start;
                 flex-direction: column;
@@ -291,13 +277,9 @@
                 align-items: flex-start;
                 flex-direction: column;
             }
-
         }
-
     </style>
-
 </head>
-
 
 <body>
 
@@ -312,51 +294,43 @@
     <div class="painel">
 
         <div class="topo">
-
-            <strong>
-                Computadores
-            </strong>
-
-            <span
-                id="contador"
-                class="contador">
+            <strong>Computadores</strong>
+            <span id="contador" class="contador">
                 Verificando...
             </span>
-
         </div>
 
-        <div
-            id="pcs"
-            class="pcs">
-
+        <div id="pcs" class="pcs">
             <div class="mensagem">
                 Carregando computadores...
             </div>
-
         </div>
 
     </div>
 
 </div>
 
-
 <script>
 
-
-    // =========================================================
-    // SERVIDOR
-    // =========================================================
+    /*
+        URL DO SEU RENDER
+    */
 
     const SERVIDOR =
         "https://sitekey22-askfnadobgvoad.onrender.com";
 
-
-    // Impede várias atualizações ao mesmo tempo.
+    // Impede atualizações simultâneas e evita que a tela
+    // seja reconstruída enquanto uma atualização anterior ainda está rodando.
     let atualizacaoEmAndamento = false;
+
+    // ID do computador que está sendo editado.
+    // Enquanto houver uma edição aberta, o refresh automático
+    // não reconstrói o card e não interfere no campo de texto.
+    let nomeEmEdicao = null;
 
 
     // =========================================================
-    // ESCAPAR TEXTO
+    // ESCAPAR TEXTO PARA HTML
     // =========================================================
 
     function escaparHTML(texto) {
@@ -367,185 +341,104 @@
             .replaceAll(">", "&gt;")
             .replaceAll('"', "&quot;")
             .replaceAll("'", "&#039;");
-
     }
 
 
     // =========================================================
-    // NOMES PERSONALIZADOS
+    // NOMES PERSONALIZADOS DOS COMPUTADORES
     // =========================================================
 
-    const CHAVE_NOMES_PCS =
-        "sitekey_nomes_pcs";
-
+    const CHAVE_NOMES_PCS = "sitekey_nomes_pcs";
 
     function obterNomesPCs() {
-
         try {
-
             return JSON.parse(
-                localStorage.getItem(
-                    CHAVE_NOMES_PCS
-                ) || "{}"
+                localStorage.getItem(CHAVE_NOMES_PCS) || "{}"
             );
-
         } catch (erro) {
-
             return {};
-
         }
-
     }
-
 
     function obterNomePC(pc) {
+        const nomes = obterNomesPCs();
 
-        const nomes =
-            obterNomesPCs();
-
-        return (
-            nomes[pc.id] ||
-            pc.nome ||
-            "Computador"
-        );
-
+        // O ID do PC é usado como chave.
+        // Assim, quando o mesmo PC voltar a ficar online,
+        // o nome personalizado continua sendo o mesmo.
+        return nomes[pc.id] || pc.nome || "Computador";
     }
 
-
-    function salvarNomePC(
-        pcId,
-        novoNome
-    ) {
-
-        novoNome =
-            String(
-                novoNome || ""
-            ).trim();
-
+    function salvarNomePC(pcId, novoNome) {
+        novoNome = String(novoNome || "").trim();
 
         if (!novoNome) {
-
-            alert(
-                "Digite um nome para o computador."
-            );
-
+            alert("Digite um nome para o computador.");
             return;
-
         }
 
-
-        const nomes =
-            obterNomesPCs();
-
-
-        nomes[pcId] =
-            novoNome;
-
+        const nomes = obterNomesPCs();
+        nomes[pcId] = novoNome;
 
         localStorage.setItem(
             CHAVE_NOMES_PCS,
             JSON.stringify(nomes)
         );
 
-
         carregarComputadores();
-
     }
 
-
     function editarNomePC(pcId) {
+        nomeEmEdicao = pcId;
 
         const display =
-            document.getElementById(
-                "nome-display-" + pcId
-            );
-
+            document.getElementById("nome-display-" + pcId);
 
         const edicao =
-            document.getElementById(
-                "nome-edicao-" + pcId
-            );
-
+            document.getElementById("nome-edicao-" + pcId);
 
         if (!display || !edicao) {
             return;
         }
 
-
-        display.style.display =
-            "none";
-
-
-        edicao.style.display =
-            "flex";
-
+        display.style.display = "none";
+        edicao.style.display = "flex";
 
         const input =
-            document.getElementById(
-                "nome-input-" + pcId
-            );
-
+            document.getElementById("nome-input-" + pcId);
 
         if (input) {
-
             input.focus();
             input.select();
-
         }
-
     }
-
 
     function cancelarEdicaoNome(pcId) {
+        nomeEmEdicao = null;
 
         const display =
-            document.getElementById(
-                "nome-display-" + pcId
-            );
-
+            document.getElementById("nome-display-" + pcId);
 
         const edicao =
-            document.getElementById(
-                "nome-edicao-" + pcId
-            );
+            document.getElementById("nome-edicao-" + pcId);
 
-
-        if (display) {
-
-            display.style.display =
-                "flex";
-
-        }
-
-
-        if (edicao) {
-
-            edicao.style.display =
-                "none";
-
-        }
-
+        if (display) display.style.display = "flex";
+        if (edicao) edicao.style.display = "none";
     }
 
-
     function confirmarNomePC(pcId) {
-
         const input =
-            document.getElementById(
-                "nome-input-" + pcId
-            );
-
+            document.getElementById("nome-input-" + pcId);
 
         if (!input) {
             return;
         }
 
+        salvarNomePC(pcId, input.value);
 
-        salvarNomePC(
-            pcId,
-            input.value
-        );
-
+        // Só libera o refresh automático depois que o usuário
+        // clicar em Salvar.
+        nomeEmEdicao = null;
     }
 
 
@@ -555,167 +448,129 @@
 
     async function carregarComputadores() {
 
+        // Se já existe uma atualização em andamento, não inicia outra.
         if (atualizacaoEmAndamento) {
             return;
         }
 
+        // Não reconstrói os cards enquanto o usuário estiver editando
+        // o nome de um computador.
+        if (nomeEmEdicao !== null) {
+            return;
+        }
 
         atualizacaoEmAndamento = true;
 
-
         const container =
-            document.getElementById(
-                "pcs"
-            );
-
+            document.getElementById("pcs");
 
         const contador =
-            document.getElementById(
-                "contador"
-            );
-
+            document.getElementById("contador");
 
         try {
 
             const resposta =
-                await fetch(
-                    SERVIDOR + "/pcs",
-                    {
-                        cache: "no-store"
-                    }
-                );
-
+                await fetch(SERVIDOR + "/pcs", {
+                    cache: "no-store"
+                });
 
             if (!resposta.ok) {
-
-                throw new Error(
-                    "Erro ao carregar PCs"
-                );
-
+                throw new Error("Erro ao carregar PCs");
             }
-
 
             const dados =
                 await resposta.json();
 
-
-            const lista =
-                dados.pcs || [];
-
+            const lista = dados.pcs || [];
 
             const online =
-                lista.filter(
-                    pc => pc.online
-                ).length;
-
+                lista.filter(pc => pc.online).length;
 
             contador.textContent =
                 `${lista.length} computador(es) • ${online} online`;
 
-
+            /*
+             * IMPORTANTE:
+             * Não usamos innerHTML = "" aqui.
+             *
+             * Os novos cards são montados primeiro em um
+             * DocumentFragment. Só depois que tudo estiver
+             * pronto substituímos o conteúdo antigo de uma vez.
+             *
+             * Assim o usuário não vê a tela desaparecer.
+             */
             const novaTela =
                 document.createDocumentFragment();
-
 
             if (lista.length === 0) {
 
                 const vazio =
-                    document.createElement(
-                        "div"
-                    );
+                    document.createElement("div");
 
-
-                vazio.className =
-                    "sem-pcs";
-
+                vazio.className = "sem-pcs";
 
                 vazio.textContent =
                     "Nenhum computador conectado ainda.";
 
-
-                novaTela.appendChild(
-                    vazio
-                );
+                novaTela.appendChild(vazio);
 
             } else {
 
                 for (const pc of lista) {
-
-                    await criarCardPC(
-                        pc,
-                        novaTela
-                    );
-
+                    await criarCardPC(pc, novaTela);
                 }
 
             }
 
-
-            container.replaceChildren(
-                novaTela
-            );
-
+            /*
+             * Troca única e instantânea.
+             * O conteúdo antigo permanece na tela durante
+             * toda a consulta ao servidor.
+             */
+            container.replaceChildren(novaTela);
 
         } catch (erro) {
 
-            console.error(
-                "Erro ao carregar computadores:",
-                erro
-            );
-
+            console.error("Erro ao carregar computadores:", erro);
 
             contador.textContent =
                 "Servidor indisponível";
 
+            /*
+             * NÃO apagamos os cards que já estavam na tela.
+             * Assim, se o Render demorar ou falhar momentaneamente,
+             * a interface não pisca nem fica vazia.
+             */
         } finally {
 
-            atualizacaoEmAndamento =
-                false;
-
+            atualizacaoEmAndamento = false;
         }
-
     }
 
 
     // =========================================================
-    // CRIAR CARD DO PC
+    // CRIAR CARD DE UM COMPUTADOR
     // =========================================================
 
-    async function criarCardPC(
-        pc,
-        container
-    ) {
+    async function criarCardPC(pc, container) {
 
         const div =
-            document.createElement(
-                "div"
-            );
+            document.createElement("div");
 
-
-        div.className =
-            "pc";
-
+        div.className = "pc";
 
         const idSeguro =
-            encodeURIComponent(
-                pc.id
-            );
+            encodeURIComponent(pc.id);
 
 
         const statusClasse =
-            pc.online
-                ? "online"
-                : "offline";
-
+            pc.online ? "online" : "offline";
 
         const statusTexto =
-            pc.online
-                ? "ONLINE"
-                : "OFFLINE";
+            pc.online ? "ONLINE" : "OFFLINE";
 
 
         let arquivos = [];
-
 
         try {
 
@@ -726,281 +581,172 @@
                     idSeguro
                 );
 
-
             if (resposta.ok) {
 
                 const dados =
                     await resposta.json();
 
-
                 arquivos =
                     dados.arquivos || [];
-
             }
 
         } catch (erro) {
 
             arquivos = [];
-
         }
 
 
         const arquivosHTML =
-
             arquivos.length === 0
-
                 ? `
-
                     <div class="mensagem">
                         Nenhum arquivo recebido deste computador.
                     </div>
-
                   `
+                : arquivos.map(arquivo => {
 
-                : arquivos.map(
-                    arquivo => {
+                    const nome =
+                        escaparHTML(arquivo.nome);
 
-                        const nome =
-                            escaparHTML(
-                                arquivo.nome
-                            );
+                    const idArquivo =
+                        encodeURIComponent(arquivo.id);
 
+                    return `
+                        <div class="arquivo">
 
-                        const idArquivo =
-                            encodeURIComponent(
-                                arquivo.id
-                            );
+                            <div class="informacoes">
 
-
-                        return `
-
-                            <div class="arquivo">
-
-                                <div class="informacoes">
-
-                                    <div class="nome">
-                                        📄 ${nome}
-                                    </div>
-
-                                    <div class="data">
-
-                                        Enviado em
-                                        ${escaparHTML(
-                                            arquivo.data
-                                        )}
-
-                                        às
-
-                                        ${escaparHTML(
-                                            arquivo.hora
-                                        )}
-
-                                    </div>
-
+                                <div class="nome">
+                                    📄 ${nome}
                                 </div>
 
-
-                                <div class="acoes">
-
-                                    <button
-                                        class="baixar"
-                                        onclick="baixarArquivo(
-                                            '${idSeguro}',
-                                            '${idArquivo}'
-                                        )">
-
-                                        Baixar
-
-                                    </button>
-
-
-                                    <button
-                                        class="excluir"
-                                        onclick="excluirArquivo(
-                                            '${idSeguro}',
-                                            '${idArquivo}'
-                                        )">
-
-                                        Excluir
-
-                                    </button>
-
+                                <div class="data">
+                                    Enviado em
+                                    ${escaparHTML(arquivo.data)}
+                                    às
+                                    ${escaparHTML(arquivo.hora)}
                                 </div>
 
                             </div>
 
-                        `;
+                            <div class="acoes">
 
-                    }
-                ).join("");
+                                <button
+                                    class="baixar"
+                                    onclick="baixarArquivo(
+                                        '${idSeguro}',
+                                        '${idArquivo}'
+                                    )">
+                                    Baixar
+                                </button>
+
+                                <button
+                                    class="excluir"
+                                    onclick="excluirArquivo(
+                                        '${idSeguro}',
+                                        '${idArquivo}'
+                                    )">
+                                    Excluir
+                                </button>
+
+                            </div>
+
+                        </div>
+                    `;
+                }).join("");
 
 
         const pedido =
-
             pc.atualizacao_solicitada
-
                 ? `
-
                     <span class="atualizacao-pendente">
                         • Atualização solicitada
                     </span>
-
                   `
-
                 : "";
-
-
-        const nomePC =
-            obterNomePC(pc);
 
 
         div.innerHTML = `
 
             <div class="pc-cabecalho">
 
-
                 <div class="pc-nome">
-
 
                     <span
                         id="nome-display-${idSeguro}"
-                        style="
-                            display:flex;
-                            align-items:center;
-                            gap:10px;
-                        ">
-
+                        style="display:flex; align-items:center; gap:10px;">
 
                         💻
-
-
                         <span>
-                            ${escaparHTML(nomePC)}
+                            ${escaparHTML(obterNomePC(pc))}
                         </span>
-
 
                         <button
                             class="editar-nome"
-                            onclick="editarNomePC(
-                                '${idSeguro}'
-                            )">
-
+                            onclick="editarNomePC('${idSeguro}')">
                             ✏️ Editar
-
                         </button>
 
-
                     </span>
-
 
                     <span
                         id="nome-edicao-${idSeguro}"
                         class="nome-pc-edicao">
 
-
                         <input
                             id="nome-input-${idSeguro}"
                             type="text"
                             maxlength="50"
-                            value="${escaparHTML(nomePC)}"
-                            onkeydown="
-                                if(event.key === 'Enter')
-                                    confirmarNomePC('${idSeguro}');
-
-                                if(event.key === 'Escape')
-                                    cancelarEdicaoNome('${idSeguro}');
-                            "
-                        >
-
+                            value="${escaparHTML(obterNomePC(pc))}"
+                            onkeydown="if(event.key === 'Enter') confirmarNomePC('${idSeguro}'); if(event.key === 'Escape') cancelarEdicaoNome('${idSeguro}');">
 
                         <button
                             class="salvar-nome"
-                            onclick="
-                                confirmarNomePC(
-                                    '${idSeguro}'
-                                )
-                            ">
-
+                            onclick="confirmarNomePC('${idSeguro}')">
                             Salvar
-
                         </button>
-
 
                         <button
                             class="cancelar-nome"
-                            onclick="
-                                cancelarEdicaoNome(
-                                    '${idSeguro}'
-                                )
-                            ">
-
+                            onclick="cancelarEdicaoNome('${idSeguro}')">
                             Cancelar
-
                         </button>
-
 
                     </span>
 
-
                     ${pedido}
-
 
                 </div>
 
-
                 <div class="status">
 
-
-                    <div
-                        class="bolinha ${statusClasse}">
+                    <div class="bolinha ${statusClasse}">
                     </div>
-
 
                     <span>
                         ${statusTexto}
                     </span>
 
-
-                    <button
-                        class="excluir-pc"
-                        onclick="
-                            excluirPC(
-                                '${idSeguro}',
-                                '${escaparHTML(nomePC)}'
-                            )
-                        ">
-
-                        🗑️ Excluir PC
-
-                    </button>
-
-
                 </div>
-
 
             </div>
 
 
             <div class="pc-conteudo">
 
-
                 <div class="pc-acoes">
-
 
                     <button
                         class="atualizar"
-                        onclick="
-                            solicitarAtualizacao(
-                                '${idSeguro}',
-                                '${escaparHTML(pc.nome)}'
-                            )
-                        "
+                        onclick="solicitarAtualizacao(
+                            '${idSeguro}',
+                            '${escaparHTML(pc.nome)}'
+                        )"
                         ${pc.online ? "" : "disabled"}>
 
                         🔄 Atualizar arquivo
 
                     </button>
-
 
                 </div>
 
@@ -1011,21 +757,16 @@
 
                 </div>
 
-
             </div>
 
         `;
 
-
-        container.appendChild(
-            div
-        );
-
+        container.appendChild(div);
     }
 
 
     // =========================================================
-    // SOLICITAR ATUALIZAÇÃO
+    // SOLICITAR ATUALIZAÇÃO DE UM PC
     // =========================================================
 
     async function solicitarAtualizacao(
@@ -1045,16 +786,14 @@
                     }
                 );
 
-
             const dados =
                 await resposta.json();
 
 
             if (dados.sucesso) {
 
-                // Atualiza silenciosamente.
-                // Não mostra mensagem na página.
-
+                // Não exibe mensagem na página.
+                // Apenas atualiza o estado do computador silenciosamente.
                 carregarComputadores();
 
             } else {
@@ -1063,7 +802,6 @@
                     dados.erro ||
                     "Não foi possível solicitar a atualização."
                 );
-
             }
 
 
@@ -1072,82 +810,12 @@
             alert(
                 "Não foi possível conectar ao servidor."
             );
-
         }
-
     }
 
 
     // =========================================================
-    // EXCLUIR COMPUTADOR
-    // =========================================================
-
-    async function excluirPC(
-        pcId,
-        pcNome
-    ) {
-
-        const confirmar =
-            confirm(
-                "Deseja realmente excluir este computador?\n\n" +
-                "Computador: " +
-                pcNome +
-                "\n\n" +
-                "Os arquivos armazenados deste PC também serão excluídos."
-            );
-
-
-        if (!confirmar) {
-            return;
-        }
-
-
-        try {
-
-            const resposta =
-                await fetch(
-                    SERVIDOR +
-                    "/excluir_pc/" +
-                    pcId,
-                    {
-                        method: "DELETE"
-                    }
-                );
-
-
-            const dados =
-                await resposta.json();
-
-
-            if (dados.sucesso) {
-
-                // Atualiza silenciosamente.
-
-                carregarComputadores();
-
-            } else {
-
-                alert(
-                    dados.erro ||
-                    "Não foi possível excluir o computador."
-                );
-
-            }
-
-
-        } catch (erro) {
-
-            alert(
-                "Não foi possível conectar ao servidor."
-            );
-
-        }
-
-    }
-
-
-    // =========================================================
-    // BAIXAR ARQUIVO
+    // BAIXAR
     // =========================================================
 
     function baixarArquivo(
@@ -1161,12 +829,11 @@
             pcId +
             "/" +
             nome;
-
     }
 
 
     // =========================================================
-    // EXCLUIR ARQUIVO
+    // EXCLUIR
     // =========================================================
 
     async function excluirArquivo(
@@ -1214,7 +881,6 @@
                     dados.erro ||
                     "Não foi possível excluir."
                 );
-
             }
 
 
@@ -1223,9 +889,7 @@
             alert(
                 "Não foi possível conectar ao servidor."
             );
-
         }
-
     }
 
 
@@ -1236,20 +900,15 @@
     carregarComputadores();
 
 
-    // Atualiza a lista a cada 5 segundos.
+    // Atualiza computadores, status e arquivos a cada 5 segundos.
+    setInterval(() => {
 
-    setInterval(
-        () => {
+        // A função já possui proteção contra chamadas simultâneas.
+        carregarComputadores();
 
-            carregarComputadores();
-
-        },
-        5000
-    );
-
+    }, 5000);
 
 </script>
 
 </body>
 </html>
-```
