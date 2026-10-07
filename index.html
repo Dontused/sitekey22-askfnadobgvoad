@@ -131,6 +131,17 @@
             color: #333;
         }
 
+        .excluir-pc {
+            background: #d93636;
+            color: white;
+            padding: 7px 10px;
+            font-size: 12px;
+        }
+
+        .excluir-pc:hover {
+            background: #b92323;
+        }
+
         .status {
             display: flex;
             align-items: center;
@@ -687,6 +698,15 @@
                             ✏️ Editar
                         </button>
 
+                        <button
+                            class="excluir-pc"
+                            onclick="excluirPC(
+                                '${idSeguro}',
+                                '${escaparHTML(obterNomePC(pc))}'
+                            )">
+                            🗑️ Remover
+                        </button>
+
                     </span>
 
                     <span
@@ -804,6 +824,68 @@
                 );
             }
 
+
+        } catch (erro) {
+
+            alert(
+                "Não foi possível conectar ao servidor."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // REMOVER DISPOSITIVO
+    // =========================================================
+
+    async function excluirPC(pcId, pcNome) {
+
+        const confirmar =
+            confirm(
+                "Deseja realmente remover este dispositivo?\n\n" +
+                "Computador: " + pcNome + "\n\n" +
+                "Os arquivos armazenados deste PC também serão excluídos."
+            );
+
+        if (!confirmar) {
+            return;
+        }
+
+        try {
+
+            const resposta =
+                await fetch(
+                    SERVIDOR +
+                    "/excluir_pc/" +
+                    encodeURIComponent(pcId),
+                    {
+                        method: "DELETE"
+                    }
+                );
+
+            const dados =
+                await resposta.json();
+
+            if (dados.sucesso) {
+
+                // Remove o nome personalizado salvo neste navegador.
+                const nomes = obterNomesPCs();
+                delete nomes[pcId];
+
+                localStorage.setItem(
+                    CHAVE_NOMES_PCS,
+                    JSON.stringify(nomes)
+                );
+
+                carregarComputadores();
+
+            } else {
+
+                alert(
+                    dados.erro ||
+                    "Não foi possível remover o dispositivo."
+                );
+            }
 
         } catch (erro) {
 
