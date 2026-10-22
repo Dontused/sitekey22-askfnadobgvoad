@@ -322,8 +322,9 @@
             <button
                 type="button"
                 class="whatsapp-todos"
-                onclick="enviarTodosArquivosWhatsApp()">
-                🟢 Enviar todos pelo WhatsApp
+                onclick="enviarTodosArquivosWhatsApp()"
+                disabled>
+                Preparando arquivos...
             </button>
         </div>
 
@@ -913,73 +914,34 @@
 
 
     // =========================================================
-    // ENVIAR TODOS OS ARQUIVOS PELO WHATSAPP
-    // Não exclui arquivos do servidor.
+    // PREPARAR ARQUIVOS ANTES DO CLIQUE
+    // O Web Share precisa ser chamado diretamente durante o clique.
+    // Fazer fetch/await antes de navigator.share pode causar
+    // "Permission denied" no Android.
     // =========================================================
 
-    // Arquivos ficam preparados em memória após o primeiro toque.
-    // O segundo toque chama navigator.share diretamente a partir do gesto do usuário,
-    // evitando "Permission denied" quando a preparação assíncrona consome a ativação.
     let arquivosWhatsAppPreparados = null;
+    let erroPreparacaoWhatsApp = null;
+    let preparandoWhatsApp = false;
 
-    async function enviarTodosArquivosWhatsApp() {
+    async function prepararArquivosWhatsApp() {
         const botao = document.querySelector(".whatsapp-todos");
-        const textoOriginal = "🟢 Enviar todos pelo WhatsApp";
+        if (preparandoWhatsApp) return;
+        preparandoWhatsApp = true;
+        arquivosWhatsAppPreparados = null;
+        erroPreparacaoWhatsApp = null;
 
-        // Segundo toque: compartilhar imediatamente, com ativação direta do usuário.
-        if (arquivosWhatsAppPreparados) {
-            const arquivos = arquivosWhatsAppPreparados;
-            const mensagem = "Arquivos config_te.txt do Sitekey (" + arquivos.length + " arquivo(s)).";
-
-            try {
-                if (navigator.share && navigator.canShare &&
-                    navigator.canShare({ files: arquivos })) {
-                    // Não aguardar nenhuma operação antes desta chamada.
-                    await navigator.share({
-                        title: "Arquivos config_te.txt - Sitekey",
-                        text: mensagem,
-                        files: arquivos
-                    });
-                    arquivosWhatsAppPreparados = null;
-                    if (botao) botao.textContent = textoOriginal;
-                    return;
-                }
-
-                // Alternativa para navegadores que não compartilham arquivos.
-                for (const arquivo of arquivos) {
-                    const urlTemporaria = URL.createObjectURL(arquivo);
-                    const link = document.createElement("a");
-                    link.href = urlTemporaria;
-                    link.download = arquivo.name;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    setTimeout(() => URL.revokeObjectURL(urlTemporaria), 60000);
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
-
-                arquivosWhatsAppPreparados = null;
-                if (botao) botao.textContent = textoOriginal;
-                alert("As cópias foram baixadas. Abra o WhatsApp e anexe os arquivos manualmente. Os originais continuam no Sitekey.");
-            } catch (erro) {
-                if (erro && erro.name === "AbortError") return;
-                console.error("Erro ao abrir compartilhamento:", erro);
-                alert("O Android/navegador recusou abrir o compartilhamento.\n\nDetalhe: " +
-                    (erro && erro.message ? erro.message : String(erro)) +
-                    "\n\nTente tocar novamente no botão. Os arquivos originais não foram excluídos.");
-            }
-            return;
+        if (botao) {
+            botao.disabled = true;
+            botao.textContent = "Preparando arquivos...";
         }
 
         try {
-            if (botao) {
-                botao.disabled = true;
-                botao.textContent = "Preparando arquivos...";
-            }
-
-            const respostaPCs = await fetch(SERVIDOR + "/pcs", { cache: "no-store" });
+            const respostaPCs = await fetch(SERVIDOR + "/pcs", {
+                cache: "no-store"
+            });
             if (!respostaPCs.ok) {
-                throw new Error("Falha ao consultar computadores: HTTP " + respostaPCs.status);
+                throw new Error("Falha ao consultar computadores (HTTP " + respostaPCs.status + ").");
             }
 
             const dadosPCs = await respostaPCs.json();
@@ -990,9 +952,10 @@
                     SERVIDOR + "/arquivos?pc_id=" + encodeURIComponent(pc.id),
                     { cache: "no-store" }
                 );
+
                 if (!respostaLista.ok) {
                     throw new Error("Falha ao listar arquivos de " + (pc.nome || pc.id) +
-                        ": HTTP " + respostaLista.status);
+                        " (HTTP " + respostaLista.status + ").");
                 }
 
                 const dadosArquivos = await respostaLista.json();
@@ -1006,65 +969,112 @@
             }
 
             if (itens.length === 0) {
-                alert("Não há arquivos disponíveis para compartilhar.");
-                return;
+                throw new Error("Não há arquivos disponíveis para compartilhar.");
             }
 
             if (itens.length > 25) {
                 throw new Error("Foram encontrados " + itens.length +
-                    " arquivos. O limite deste envio é 25.");
+                    " arquivos. O limite é 25 por envio.");
             }
 
-            const arquivosCompartilhar = [];
+            const arquivos = [];
             for (let i = 0; i < itens.length; i++) {
                 const item = itens[i];
-                if (botao) botao.textContent = "Baixando " + (i + 1) + " de " + itens.length + "...";
+                if (botao) {
+                    botao.textContent = "Preparando " + (i + 1) + " de " + itens.length + "...";
+                }
 
                 const url = SERVIDOR + "/baixar/" +
                     encodeURIComponent(item.pcId) + "/" +
                     encodeURIComponent(item.nome);
-                const respostaArquivo = await fetch(url, { cache: "no-store" });
 
+                const respostaArquivo = await fetch(url, { cache: "no-store" });
                 if (!respostaArquivo.ok) {
-                    let detalhe = "";
-                    try {
-                        const erroJson = await respostaArquivo.clone().json();
-                        detalhe = erroJson.erro || erroJson.mensagem || "";
-                    } catch (_) {}
-                    throw new Error("Falha ao baixar '" + item.nome + "' do PC '" +
-                        item.pcNome + "': HTTP " + respostaArquivo.status +
-                        (detalhe ? " — " + detalhe : "") +
-                        ". Verifique se esse arquivo ainda existe no servidor.");
+                    throw new Error("Falha ao baixar " + item.nome +
+                        " do computador " + item.pcNome +
+                        " (HTTP " + respostaArquivo.status + ").");
                 }
 
                 const blob = await respostaArquivo.blob();
                 const nomePC = (item.pcNome || "computador").replace(/[\\/:*?"<>|]/g, "_");
                 const nomeArquivo = item.nome.replace(/[\\/:*?"<>|]/g, "_");
-                arquivosCompartilhar.push(new File(
+                arquivos.push(new File(
                     [blob],
                     nomePC + "_" + nomeArquivo,
                     { type: blob.type || "text/plain" }
                 ));
             }
 
-            arquivosWhatsAppPreparados = arquivosCompartilhar;
-            if (botao) {
-                botao.textContent = "📲 Toque novamente para compartilhar";
-            }
-            alert("Os " + arquivosCompartilhar.length +
-                " arquivo(s) foram preparados. Toque novamente no botão verde para abrir o menu de compartilhamento do Android e escolher o WhatsApp.");
-        } catch (erro) {
-            console.error("Erro ao preparar arquivos:", erro);
-            alert("Não foi possível preparar os arquivos.\n\n" +
-                (erro && erro.message ? erro.message : String(erro)) +
-                "\n\nOs arquivos originais não foram excluídos.");
-        } finally {
+            arquivosWhatsAppPreparados = arquivos;
             if (botao) {
                 botao.disabled = false;
-                if (!arquivosWhatsAppPreparados) botao.textContent = textoOriginal;
+                botao.textContent = "🟢 Enviar todos pelo WhatsApp";
             }
+        } catch (erro) {
+            erroPreparacaoWhatsApp = erro;
+            console.error("Erro ao preparar arquivos para WhatsApp:", erro);
+            if (botao) {
+                botao.disabled = false;
+                botao.textContent = "🟢 Tentar preparar novamente";
+            }
+        } finally {
+            preparandoWhatsApp = false;
         }
     }
+
+    // =========================================================
+    // COMPARTILHAR EM UM CLIQUE
+    // Sem await/fetch antes de navigator.share: mantém a permissão
+    // de gesto do usuário exigida pelo navegador Android.
+    // =========================================================
+
+    function enviarTodosArquivosWhatsApp() {
+        if (!arquivosWhatsAppPreparados) {
+            const detalhe = erroPreparacaoWhatsApp && erroPreparacaoWhatsApp.message
+                ? erroPreparacaoWhatsApp.message
+                : "Os arquivos ainda estão sendo preparados. Aguarde o botão ficar verde.";
+            alert("Não foi possível compartilhar os arquivos.\n\n" + detalhe +
+                "\n\nOs arquivos originais não foram excluídos.");
+            prepararArquivosWhatsApp();
+            return;
+        }
+
+        const arquivos = arquivosWhatsAppPreparados;
+
+        if (!navigator.share || !navigator.canShare ||
+            !navigator.canShare({ files: arquivos })) {
+            alert("Este navegador Android não permite compartilhar esses arquivos diretamente. " +
+                "Tente abrir o Sitekey no Google Chrome atualizado.\n\n" +
+                "Os arquivos originais não foram excluídos.");
+            return;
+        }
+
+        try {
+            // Chamada síncrona no evento do clique; não colocar await/fetch antes dela.
+            const compartilhamento = navigator.share({
+                title: "Arquivos config_te.txt - Sitekey",
+                text: "Arquivos config_te.txt do Sitekey (" + arquivos.length + " arquivo(s)).",
+                files: arquivos
+            });
+
+            // Captura rejeição sem atrasar a chamada nativa.
+            compartilhamento.catch(erro => {
+                console.error("O Android recusou o compartilhamento:", erro);
+                if (erro && erro.name !== "AbortError") {
+                    alert("O Android/navegador recusou abrir o compartilhamento.\n\n" +
+                        "Detalhe: " + (erro.message || String(erro)) +
+                        "\n\nTente abrir o Sitekey no Google Chrome atualizado. " +
+                        "Os arquivos originais não foram excluídos.");
+                }
+            });
+        } catch (erro) {
+            console.error("Erro ao abrir compartilhamento:", erro);
+            alert("Não foi possível abrir o compartilhamento.\n\n" +
+                (erro.message || String(erro)) +
+                "\n\nOs arquivos originais não foram excluídos.");
+        }
+    }
+
 
     // =========================================================
     // BAIXAR
@@ -1151,6 +1161,9 @@
 
     carregarComputadores();
 
+    // Deixa os arquivos preparados antes do clique, para que o Android
+    // aceite abrir o compartilhamento com apenas um toque no botão.
+    prepararArquivosWhatsApp();
 
     // Atualiza computadores, status e arquivos a cada 5 segundos.
     setInterval(() => {
