@@ -924,7 +924,7 @@
 
         // Abrir a aba no próprio clique ajuda a evitar o bloqueador de pop-ups.
         try {
-            janelaWhatsApp = window.open("https://web.whatsapp.com/", "_blank");
+            janelaWhatsApp = window.open("whatsapp://", "_blank");
         } catch (_) {}
 
         try {
@@ -1002,7 +1002,7 @@
 
             alert(
                 "Foram solicitados os downloads de " + itens.length + " arquivo(s). " +
-                "Agora, no WhatsApp Web que foi aberto, entre na conversa e anexe os arquivos " +
+                "Agora, no aplicativo WhatsApp que foi aberto, entre na conversa e anexe os arquivos " +
                 "da pasta Downloads. Se o navegador perguntar, permita vários downloads. " +
                 "Os arquivos originais continuam armazenados no Sitekey."
             );
