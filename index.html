@@ -322,9 +322,8 @@
             <button
                 type="button"
                 class="whatsapp-todos"
-                onclick="enviarTodosArquivosWhatsApp()"
-                disabled>
-                Preparando arquivos...
+                onclick="enviarTodosArquivosWhatsApp()">
+                🟢 Preparar ZIP para WhatsApp
             </button>
         </div>
 
@@ -914,167 +913,68 @@
 
 
     // =========================================================
-    // PREPARAR ARQUIVOS ANTES DO CLIQUE
-    // O Web Share precisa ser chamado diretamente durante o clique.
-    // Fazer fetch/await antes de navigator.share pode causar
-    // "Permission denied" no Android.
+    // ENVIAR TODOS OS ARQUIVOS PELO WHATSAPP
+    // Não exclui arquivos do servidor.
     // =========================================================
 
-    let arquivosWhatsAppPreparados = null;
-    let erroPreparacaoWhatsApp = null;
-    let preparandoWhatsApp = false;
-
-    async function prepararArquivosWhatsApp() {
+    async function enviarTodosArquivosWhatsApp() {
         const botao = document.querySelector(".whatsapp-todos");
-        if (preparandoWhatsApp) return;
-        preparandoWhatsApp = true;
-        arquivosWhatsAppPreparados = null;
-        erroPreparacaoWhatsApp = null;
-
-        if (botao) {
-            botao.disabled = true;
-            botao.textContent = "Preparando arquivos...";
-        }
+        const textoOriginal = botao ? botao.textContent : "";
 
         try {
-            const respostaPCs = await fetch(SERVIDOR + "/pcs", {
+            if (botao) {
+                botao.disabled = true;
+                botao.textContent = "Preparando ZIP...";
+            }
+
+            // O backend monta uma cópia ZIP em memória; os originais ficam intactos.
+            const resposta = await fetch(SERVIDOR + "/baixar_todos_zip", {
                 cache: "no-store"
             });
-            if (!respostaPCs.ok) {
-                throw new Error("Falha ao consultar computadores (HTTP " + respostaPCs.status + ").");
+
+            if (!resposta.ok) {
+                let detalhe = "HTTP " + resposta.status;
+                try {
+                    const dadosErro = await resposta.json();
+                    if (dadosErro.erro) detalhe = dadosErro.erro + " (HTTP " + resposta.status + ")";
+                } catch (_) {}
+                throw new Error(detalhe);
             }
 
-            const dadosPCs = await respostaPCs.json();
-            const itens = [];
-
-            for (const pc of (dadosPCs.pcs || [])) {
-                const respostaLista = await fetch(
-                    SERVIDOR + "/arquivos?pc_id=" + encodeURIComponent(pc.id),
-                    { cache: "no-store" }
-                );
-
-                if (!respostaLista.ok) {
-                    throw new Error("Falha ao listar arquivos de " + (pc.nome || pc.id) +
-                        " (HTTP " + respostaLista.status + ").");
-                }
-
-                const dadosArquivos = await respostaLista.json();
-                for (const arquivo of (dadosArquivos.arquivos || [])) {
-                    itens.push({
-                        pcId: pc.id,
-                        pcNome: obterNomePC(pc),
-                        nome: arquivo.nome || arquivo.id || "config_te.txt"
-                    });
-                }
+            const blob = await resposta.blob();
+            if (!blob.size) {
+                throw new Error("O servidor retornou um ZIP vazio.");
             }
 
-            if (itens.length === 0) {
-                throw new Error("Não há arquivos disponíveis para compartilhar.");
-            }
+            const urlTemporaria = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = urlTemporaria;
+            link.download = "sitekey_arquivos.zip";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(urlTemporaria), 120000);
 
-            if (itens.length > 25) {
-                throw new Error("Foram encontrados " + itens.length +
-                    " arquivos. O limite é 25 por envio.");
-            }
+            alert(
+                "O ZIP foi preparado para download.\n\n" +
+                "No Android, abra Downloads, localize o ZIP e escolha Compartilhar → WhatsApp.\n\n" +
+                "Os arquivos originais continuam no Sitekey."
+            );
 
-            const arquivos = [];
-            for (let i = 0; i < itens.length; i++) {
-                const item = itens[i];
-                if (botao) {
-                    botao.textContent = "Preparando " + (i + 1) + " de " + itens.length + "...";
-                }
-
-                const url = SERVIDOR + "/baixar/" +
-                    encodeURIComponent(item.pcId) + "/" +
-                    encodeURIComponent(item.nome);
-
-                const respostaArquivo = await fetch(url, { cache: "no-store" });
-                if (!respostaArquivo.ok) {
-                    throw new Error("Falha ao baixar " + item.nome +
-                        " do computador " + item.pcNome +
-                        " (HTTP " + respostaArquivo.status + ").");
-                }
-
-                const blob = await respostaArquivo.blob();
-                const nomePC = (item.pcNome || "computador").replace(/[\\/:*?"<>|]/g, "_");
-                const nomeArquivo = item.nome.replace(/[\\/:*?"<>|]/g, "_");
-                arquivos.push(new File(
-                    [blob],
-                    nomePC + "_" + nomeArquivo,
-                    { type: blob.type || "text/plain" }
-                ));
-            }
-
-            arquivosWhatsAppPreparados = arquivos;
-            if (botao) {
-                botao.disabled = false;
-                botao.textContent = "🟢 Enviar todos pelo WhatsApp";
-            }
         } catch (erro) {
-            erroPreparacaoWhatsApp = erro;
-            console.error("Erro ao preparar arquivos para WhatsApp:", erro);
-            if (botao) {
-                botao.disabled = false;
-                botao.textContent = "🟢 Tentar preparar novamente";
-            }
+            console.error("Erro ao preparar ZIP:", erro);
+            alert(
+                "Não foi possível preparar o ZIP.\n\n" +
+                (erro && erro.message ? erro.message : String(erro)) +
+                "\n\nOs arquivos originais não foram excluídos."
+            );
         } finally {
-            preparandoWhatsApp = false;
+            if (botao) {
+                botao.disabled = false;
+                botao.textContent = textoOriginal;
+            }
         }
     }
-
-    // =========================================================
-    // COMPARTILHAR EM UM CLIQUE
-    // Sem await/fetch antes de navigator.share: mantém a permissão
-    // de gesto do usuário exigida pelo navegador Android.
-    // =========================================================
-
-    function enviarTodosArquivosWhatsApp() {
-        if (!arquivosWhatsAppPreparados) {
-            const detalhe = erroPreparacaoWhatsApp && erroPreparacaoWhatsApp.message
-                ? erroPreparacaoWhatsApp.message
-                : "Os arquivos ainda estão sendo preparados. Aguarde o botão ficar verde.";
-            alert("Não foi possível compartilhar os arquivos.\n\n" + detalhe +
-                "\n\nOs arquivos originais não foram excluídos.");
-            prepararArquivosWhatsApp();
-            return;
-        }
-
-        const arquivos = arquivosWhatsAppPreparados;
-
-        if (!navigator.share || !navigator.canShare ||
-            !navigator.canShare({ files: arquivos })) {
-            alert("Este navegador Android não permite compartilhar esses arquivos diretamente. " +
-                "Tente abrir o Sitekey no Google Chrome atualizado.\n\n" +
-                "Os arquivos originais não foram excluídos.");
-            return;
-        }
-
-        try {
-            // Chamada síncrona no evento do clique; não colocar await/fetch antes dela.
-            const compartilhamento = navigator.share({
-                title: "Arquivos config_te.txt - Sitekey",
-                text: "Arquivos config_te.txt do Sitekey (" + arquivos.length + " arquivo(s)).",
-                files: arquivos
-            });
-
-            // Captura rejeição sem atrasar a chamada nativa.
-            compartilhamento.catch(erro => {
-                console.error("O Android recusou o compartilhamento:", erro);
-                if (erro && erro.name !== "AbortError") {
-                    alert("O Android/navegador recusou abrir o compartilhamento.\n\n" +
-                        "Detalhe: " + (erro.message || String(erro)) +
-                        "\n\nTente abrir o Sitekey no Google Chrome atualizado. " +
-                        "Os arquivos originais não foram excluídos.");
-                }
-            });
-        } catch (erro) {
-            console.error("Erro ao abrir compartilhamento:", erro);
-            alert("Não foi possível abrir o compartilhamento.\n\n" +
-                (erro.message || String(erro)) +
-                "\n\nOs arquivos originais não foram excluídos.");
-        }
-    }
-
 
     // =========================================================
     // BAIXAR
@@ -1161,9 +1061,6 @@
 
     carregarComputadores();
 
-    // Deixa os arquivos preparados antes do clique, para que o Android
-    // aceite abrir o compartilhamento com apenas um toque no botão.
-    prepararArquivosWhatsApp();
 
     // Atualiza computadores, status e arquivos a cada 5 segundos.
     setInterval(() => {
