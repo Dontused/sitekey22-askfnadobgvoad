@@ -199,6 +199,15 @@
             background: #0f55bb;
         }
 
+        .whatsapp-todos {
+            background: #128c4a;
+            color: white;
+        }
+
+        .whatsapp-todos:hover:not(:disabled) {
+            background: #0b713a;
+        }
+
         .arquivos {
             display: flex;
             flex-direction: column;
@@ -768,6 +777,12 @@
 
                     </button>
 
+                    <button
+                        class="whatsapp-todos"
+                        onclick="enviarArquivosWhatsApp('${idSeguro}', '${escaparHTML(obterNomePC(pc))}')">
+                        🟢 Enviar arquivos pelo WhatsApp
+                    </button>
+
                 </div>
 
 
@@ -891,6 +906,120 @@
 
             alert(
                 "Não foi possível conectar ao servidor."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // COMPARTILHAR TODOS OS ARQUIVOS PELO WHATSAPP
+    // =========================================================
+
+    async function enviarArquivosWhatsApp(pcId, pcNome) {
+        try {
+            const respostaLista = await fetch(
+                SERVIDOR + "/arquivos?pc_id=" + encodeURIComponent(pcId),
+                { cache: "no-store" }
+            );
+
+            if (!respostaLista.ok) {
+                throw new Error("Não foi possível listar os arquivos.");
+            }
+
+            const dados = await respostaLista.json();
+            const arquivos = dados.arquivos || [];
+
+            if (arquivos.length === 0) {
+                alert("Não há arquivos para compartilhar deste computador.");
+                return;
+            }
+
+            if (arquivos.length > 25) {
+                alert("Foram encontrados mais de 25 arquivos. O limite esperado é 25.");
+                return;
+            }
+
+            // Baixa os arquivos apenas para montar o compartilhamento.
+            // Não chama nenhum endpoint de exclusão e não altera os originais.
+            const arquivosCompartilhar = [];
+
+            for (const arquivo of arquivos) {
+                const url =
+                    SERVIDOR +
+                    "/baixar/" +
+                    encodeURIComponent(pcId) +
+                    "/" +
+                    encodeURIComponent(arquivo.id);
+
+                const respostaArquivo = await fetch(url);
+
+                if (!respostaArquivo.ok) {
+                    throw new Error("Falha ao obter o arquivo " + arquivo.nome);
+                }
+
+                const blob = await respostaArquivo.blob();
+                arquivosCompartilhar.push(
+                    new File(
+                        [blob],
+                        arquivo.nome || "config_te.txt",
+                        { type: blob.type || "text/plain" }
+                    )
+                );
+            }
+
+            const mensagem =
+                "Arquivos config_te.txt do computador: " + pcNome +
+                "\nQuantidade de arquivos: " + arquivosCompartilhar.length;
+
+            // Em navegadores/dispositivos compatíveis, abre o menu nativo
+            // de compartilhamento; o usuário pode selecionar WhatsApp.
+            if (
+                navigator.share &&
+                navigator.canShare &&
+                navigator.canShare({ files: arquivosCompartilhar })
+            ) {
+                await navigator.share({
+                    title: "Arquivos config_te.txt - " + pcNome,
+                    text: mensagem,
+                    files: arquivosCompartilhar
+                });
+                return;
+            }
+
+            // Em navegadores sem compartilhamento de arquivos, não é possível
+            // anexar automaticamente arquivos ao WhatsApp Web. Baixa cada
+            // arquivo sem apagar os originais e abre o WhatsApp com a mensagem.
+            for (const arquivo of arquivosCompartilhar) {
+                const urlTemporaria = URL.createObjectURL(arquivo);
+                const link = document.createElement("a");
+                link.href = urlTemporaria;
+                link.download = arquivo.name;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(urlTemporaria), 60000);
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+
+            const urlWhatsApp =
+                "https://wa.me/?text=" + encodeURIComponent(mensagem);
+            window.open(urlWhatsApp, "_blank", "noopener,noreferrer");
+
+            alert(
+                "Os arquivos foram baixados para você anexá-los no WhatsApp. " +
+                "O navegador não permite anexar vários arquivos automaticamente nesta plataforma. " +
+                "Os arquivos originais continuam guardados no Sitekey."
+            );
+
+        } catch (erro) {
+            if (erro && erro.name === "AbortError") {
+                return; // O usuário fechou o menu de compartilhamento.
+            }
+
+            console.error("Erro ao compartilhar arquivos:", erro);
+            alert(
+                "Não foi possível preparar os arquivos para o WhatsApp. " +
+                "Verifique a conexão e tente novamente."
             );
         }
     }
