@@ -920,46 +920,45 @@
     async function enviarTodosArquivosWhatsApp() {
         const botao = document.querySelector(".whatsapp-todos");
         const textoOriginal = botao ? botao.textContent : "";
-        let etapa = "consultar os computadores";
-
-        // Abre a janela durante o clique para reduzir bloqueios de pop-up.
         let janelaWhatsApp = null;
+
+        // Abrir a aba no próprio clique ajuda a evitar o bloqueador de pop-ups.
         try {
-            janelaWhatsApp = window.open("about:blank", "_blank");
+            janelaWhatsApp = window.open("https://web.whatsapp.com/", "_blank");
         } catch (_) {}
 
         try {
             if (botao) {
                 botao.disabled = true;
-                botao.textContent = "Localizando arquivos...";
+                botao.textContent = "Preparando downloads...";
             }
 
             const respostaPCs = await fetch(SERVIDOR + "/pcs", {
                 cache: "no-store"
             });
+
             if (!respostaPCs.ok) {
-                throw new Error("O servidor respondeu HTTP " + respostaPCs.status + " ao consultar os computadores.");
+                throw new Error("Não foi possível consultar os computadores (HTTP " + respostaPCs.status + ").");
             }
 
             const dadosPCs = await respostaPCs.json();
             const pcs = dadosPCs.pcs || [];
             const itens = [];
 
-            etapa = "listar arquivos";
             for (const pc of pcs) {
                 const respostaLista = await fetch(
                     SERVIDOR + "/arquivos?pc_id=" + encodeURIComponent(pc.id),
                     { cache: "no-store" }
                 );
+
                 if (!respostaLista.ok) {
-                    throw new Error("HTTP " + respostaLista.status + " ao listar os arquivos de " + (pc.nome || pc.id) + ".");
+                    throw new Error("Não foi possível listar os arquivos do computador " + (pc.nome || pc.id) + ".");
                 }
 
                 const dadosArquivos = await respostaLista.json();
                 for (const arquivo of (dadosArquivos.arquivos || [])) {
                     itens.push({
                         pcId: pc.id,
-                        pcNome: obterNomePC(pc),
                         nome: arquivo.nome || "config_te.txt",
                         id: arquivo.id
                     });
@@ -967,24 +966,19 @@
             }
 
             if (itens.length === 0) {
-                if (janelaWhatsApp && !janelaWhatsApp.closed) janelaWhatsApp.close();
-                alert("Não há arquivos disponíveis para compartilhar.");
+                alert("Não há arquivos disponíveis para baixar.");
                 return;
             }
 
             if (itens.length > 25) {
-                if (janelaWhatsApp && !janelaWhatsApp.closed) janelaWhatsApp.close();
-                alert("Foram encontrados " + itens.length + " arquivos no total. O limite é 25 por envio; envie até 25 por vez.");
+                alert("Foram encontrados " + itens.length + " arquivos. O limite é 25 por envio; baixe até 25 por vez.");
                 return;
             }
 
-            const mensagem = "Arquivos config_te.txt do Sitekey (" + itens.length + " arquivo(s)).";
-
-            // Em páginas GitHub Pages no computador, o navegador pode bloquear
-            // navigator.share após operações assíncronas. Use downloads diretos
-            // e abra o WhatsApp com uma mensagem pronta.
-            etapa = "preparar os downloads";
-            for (const item of itens) {
+            // Cada clique inicia o download real do arquivo no Render.
+            // O endpoint /baixar não exclui os arquivos originais.
+            for (let i = 0; i < itens.length; i++) {
+                const item = itens[i];
                 const url =
                     SERVIDOR + "/baixar/" +
                     encodeURIComponent(item.pcId) + "/" +
@@ -992,39 +986,31 @@
 
                 const link = document.createElement("a");
                 link.href = url;
-                link.download =
-                    item.pcNome.replace(/[\\/:*?"<>|]/g, "_") + "_" +
-                    item.nome.replace(/[\\/:*?"<>|]/g, "_");
                 link.target = "_blank";
                 link.rel = "noopener";
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
-                await new Promise(resolve => setTimeout(resolve, 350));
-            }
 
-            const waUrl = "https://wa.me/?text=" + encodeURIComponent(mensagem);
-            if (janelaWhatsApp && !janelaWhatsApp.closed) {
-                janelaWhatsApp.location.href = waUrl;
-            } else {
-                // Se o navegador bloqueou a janela inicial, tenta navegar
-                // na aba atual para não falhar silenciosamente.
-                window.location.href = waUrl;
+                if (botao) {
+                    botao.textContent = "Baixando " + (i + 1) + " de " + itens.length + "...";
+                }
+
+                // Espaçamento entre downloads para reduzir bloqueios do navegador.
+                await new Promise(resolve => setTimeout(resolve, 700));
             }
 
             alert(
-                "Os downloads foram solicitados. Se o navegador bloquear vários downloads, " +
-                "permita-os para este site. Depois, anexe os arquivos baixados à conversa do WhatsApp. " +
-                "Os arquivos originais continuam no Sitekey."
+                "Foram solicitados os downloads de " + itens.length + " arquivo(s). " +
+                "Agora, no WhatsApp Web que foi aberto, entre na conversa e anexe os arquivos " +
+                "da pasta Downloads. Se o navegador perguntar, permita vários downloads. " +
+                "Os arquivos originais continuam armazenados no Sitekey."
             );
 
         } catch (erro) {
-            if (janelaWhatsApp && !janelaWhatsApp.closed) janelaWhatsApp.close();
-            if (erro && erro.name === "AbortError") return;
-
-            console.error("Erro no compartilhamento WhatsApp (" + etapa + "):", erro);
+            console.error("Erro ao baixar arquivos para o WhatsApp:", erro);
             alert(
-                "Falha ao " + etapa + ".\n\nDetalhe: " +
+                "Não foi possível preparar os downloads.\n\n" +
                 (erro && erro.message ? erro.message : String(erro)) +
                 "\n\nOs arquivos originais não foram excluídos."
             );
@@ -1035,7 +1021,6 @@
             }
         }
     }
-
 
     // =========================================================
     // BAIXAR
