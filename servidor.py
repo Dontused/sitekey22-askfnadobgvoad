@@ -1,4 +1,6 @@
 from flask import Flask, request, jsonify, send_file
+from io import BytesIO
+from zipfile import ZipFile, ZIP_DEFLATED
 import requests
 import time
 import os
@@ -525,6 +527,67 @@ def upload():
         "data": agora.strftime("%d/%m/%Y"),
         "hora": agora.strftime("%H:%M:%S")
     })
+
+
+# =========================================================
+# BAIXAR TODOS OS ARQUIVOS EM UM ZIP PARA COMPARTILHAR
+# =========================================================
+
+@app.route("/baixar_todos_zip")
+def baixar_todos_zip():
+    memoria = BytesIO()
+    quantidade = 0
+    nomes_usados = set()
+
+    try:
+        with ZipFile(memoria, "w", ZIP_DEFLATED) as zipf:
+            if PASTA_ARQUIVOS.exists():
+                for pasta_pc in PASTA_ARQUIVOS.iterdir():
+                    if not pasta_pc.is_dir():
+                        continue
+
+                    # Inclui apenas arquivos armazenados; não altera os originais.
+                    for caminho in pasta_pc.iterdir():
+                        if not caminho.is_file():
+                            continue
+
+                        nome_pc = pasta_pc.name
+                        nome_arquivo = caminho.name
+                        nome_zip = f"{nome_pc}/{nome_arquivo}"
+
+                        # Evita entradas duplicadas no ZIP.
+                        base = nome_zip
+                        indice = 2
+                        while nome_zip in nomes_usados:
+                            nome_zip = f"{nome_pc}/{indice}_{nome_arquivo}"
+                            indice += 1
+                        nomes_usados.add(nome_zip)
+
+                        zipf.write(caminho, arcname=nome_zip)
+                        quantidade += 1
+
+        if quantidade == 0:
+            return jsonify({
+                "sucesso": False,
+                "erro": "Não há arquivos disponíveis para preparar."
+            }), 404
+
+        memoria.seek(0)
+        nome_zip_download = f"sitekey_arquivos_{agora_brasil().strftime('%Y-%m-%d_%H-%M-%S')}.zip"
+        return send_file(
+            memoria,
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=nome_zip_download,
+            max_age=0
+        )
+
+    except Exception as erro:
+        print("Erro ao preparar ZIP para compartilhamento:", erro)
+        return jsonify({
+            "sucesso": False,
+            "erro": "Não foi possível preparar o arquivo ZIP."
+        }), 500
 
 
 # =========================================================
