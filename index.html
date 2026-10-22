@@ -920,23 +920,17 @@
     async function enviarTodosArquivosWhatsApp() {
         const botao = document.querySelector(".whatsapp-todos");
         const textoOriginal = botao ? botao.textContent : "";
-        let janelaWhatsApp = null;
-
-        // Abrir a aba no próprio clique ajuda a evitar o bloqueador de pop-ups.
-        try {
-            janelaWhatsApp = window.open("whatsapp://", "_blank");
-        } catch (_) {}
 
         try {
             if (botao) {
                 botao.disabled = true;
-                botao.textContent = "Preparando downloads...";
+                botao.textContent = "Preparando arquivos...";
             }
 
+            // Consulta todos os computadores cadastrados.
             const respostaPCs = await fetch(SERVIDOR + "/pcs", {
                 cache: "no-store"
             });
-
             if (!respostaPCs.ok) {
                 throw new Error("Não foi possível consultar os computadores (HTTP " + respostaPCs.status + ").");
             }
@@ -950,7 +944,6 @@
                     SERVIDOR + "/arquivos?pc_id=" + encodeURIComponent(pc.id),
                     { cache: "no-store" }
                 );
-
                 if (!respostaLista.ok) {
                     throw new Error("Não foi possível listar os arquivos do computador " + (pc.nome || pc.id) + ".");
                 }
@@ -959,6 +952,7 @@
                 for (const arquivo of (dadosArquivos.arquivos || [])) {
                     itens.push({
                         pcId: pc.id,
+                        pcNome: obterNomePC(pc),
                         nome: arquivo.nome || "config_te.txt",
                         id: arquivo.id
                     });
@@ -966,51 +960,84 @@
             }
 
             if (itens.length === 0) {
-                alert("Não há arquivos disponíveis para baixar.");
+                alert("Não há arquivos disponíveis para compartilhar.");
                 return;
             }
 
             if (itens.length > 25) {
-                alert("Foram encontrados " + itens.length + " arquivos. O limite é 25 por envio; baixe até 25 por vez.");
+                alert("Foram encontrados " + itens.length + " arquivos. O limite é 25 por envio.");
                 return;
             }
 
-            // Cada clique inicia o download real do arquivo no Render.
-            // O endpoint /baixar não exclui os arquivos originais.
+            // Busca os conteúdos reais dos arquivos, em memória, para compartilhar.
+            const arquivosCompartilhar = [];
             for (let i = 0; i < itens.length; i++) {
                 const item = itens[i];
-                const url =
-                    SERVIDOR + "/baixar/" +
+                if (botao) {
+                    botao.textContent = "Preparando " + (i + 1) + " de " + itens.length + "...";
+                }
+
+                const url = SERVIDOR + "/baixar/" +
                     encodeURIComponent(item.pcId) + "/" +
                     encodeURIComponent(item.id);
+                const respostaArquivo = await fetch(url, { cache: "no-store" });
 
+                if (!respostaArquivo.ok) {
+                    throw new Error("Não foi possível baixar " + item.nome + " (HTTP " + respostaArquivo.status + ").");
+                }
+
+                const blob = await respostaArquivo.blob();
+                const nomePC = (item.pcNome || "computador").replace(/[\\/:*?"<>|]/g, "_");
+                const nomeArquivo = item.nome.replace(/[\\/:*?"<>|]/g, "_");
+
+                arquivosCompartilhar.push(new File(
+                    [blob],
+                    nomePC + "_" + nomeArquivo,
+                    { type: blob.type || "text/plain" }
+                ));
+            }
+
+            const mensagem = "Arquivos config_te.txt do Sitekey (" + arquivosCompartilhar.length + " arquivo(s)).";
+
+            // No Android, o menu nativo permite escolher WhatsApp e a conversa.
+            if (
+                navigator.share &&
+                navigator.canShare &&
+                navigator.canShare({ files: arquivosCompartilhar })
+            ) {
+                await navigator.share({
+                    title: "Arquivos config_te.txt - Sitekey",
+                    text: mensagem,
+                    files: arquivosCompartilhar
+                });
+                return;
+            }
+
+            // Se o Android/navegador não aceitar compartilhar vários arquivos de uma vez,
+            // disponibiliza cada arquivo para download, sem tocar nos originais.
+            for (const arquivo of arquivosCompartilhar) {
+                const urlTemporaria = URL.createObjectURL(arquivo);
                 const link = document.createElement("a");
-                link.href = url;
-                link.target = "_blank";
-                link.rel = "noopener";
+                link.href = urlTemporaria;
+                link.download = arquivo.name;
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
-
-                if (botao) {
-                    botao.textContent = "Baixando " + (i + 1) + " de " + itens.length + "...";
-                }
-
-                // Espaçamento entre downloads para reduzir bloqueios do navegador.
-                await new Promise(resolve => setTimeout(resolve, 700));
+                setTimeout(() => URL.revokeObjectURL(urlTemporaria), 60000);
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
 
             alert(
-                "Foram solicitados os downloads de " + itens.length + " arquivo(s). " +
-                "Agora, no aplicativo WhatsApp que foi aberto, entre na conversa e anexe os arquivos " +
-                "da pasta Downloads. Se o navegador perguntar, permita vários downloads. " +
-                "Os arquivos originais continuam armazenados no Sitekey."
+                "Este navegador não permite compartilhar todos os arquivos diretamente. " +
+                "As cópias foram preparadas para download; abra o WhatsApp e anexe-as manualmente. " +
+                "Os arquivos originais continuam no Sitekey."
             );
 
         } catch (erro) {
-            console.error("Erro ao baixar arquivos para o WhatsApp:", erro);
+            if (erro && erro.name === "AbortError") return;
+            console.error("Erro ao compartilhar arquivos:", erro);
             alert(
-                "Não foi possível preparar os downloads.\n\n" +
+                "Não foi possível preparar os arquivos.\n\n" +
                 (erro && erro.message ? erro.message : String(erro)) +
                 "\n\nOs arquivos originais não foram excluídos."
             );
